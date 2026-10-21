@@ -1,0 +1,17 @@
+{
+  "name": "Expansión Centro",
+  "short_name": "Expansión",
+  "description": "Locales, competencia y zonas visitadas del distrito Centro de Madrid",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#eef1f0",
+  "theme_color": "#1b7f95",
+  "lang": "es",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
