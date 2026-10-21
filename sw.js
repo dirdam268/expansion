@@ -1,4 +1,4 @@
-const CACHE_NAME = 'expansion-centro-v1';
+const CACHE_NAME = 'expansion-centro-v2';
 const PRECACHE = ['./', './index.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -18,8 +18,8 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   const mismoOrigen = url.origin === self.location.origin;
-  const fuentes = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
-  // El servidor de datos (Worker) y todo lo demás de otro origen: directo a la red, nunca de caché.
+  const fuentes = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com' || url.hostname === 'cdnjs.cloudflare.com';
+  // El servidor de datos (Worker) y todo lo de otro origen va directo a la red, nunca de cache.
   if (!mismoOrigen && !fuentes) return;
 
   if (req.mode === 'navigate') {
