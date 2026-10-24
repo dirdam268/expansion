@@ -4,3 +4,5 @@
 # Fuente en claro (NO publicar): lleva la clave del servidor de datos
 index-src.html
 build-secure.ps1
+
+clave-servidor.txt
