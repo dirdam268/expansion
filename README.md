@@ -15,8 +15,10 @@ Sin servidor la app funciona en **modo local** (datos solo en ese dispositivo, c
 1. Cloudflare → *Storage & Databases → KV* → crear un namespace `expansion`.
 2. *Workers & Pages → Create → Worker* (nombre p. ej. `expansion-api`) → *Edit code* → pegar `worker/worker.js` → *Deploy*.
 3. En el Worker → *Settings → Bindings → Add → KV namespace*: variable **`EXP`**, namespace `expansion`.
-4. *Settings → Variables and Secrets → Add*: secreto **`TOKEN`** = una clave larga aleatoria.
-5. En `index-src.html` rellenar `API_URL` (`https://expansion-api.<subdominio>.workers.dev`, sin barra final) y `API_TOKEN` (el mismo valor). Reconstruir y publicar.
+4. *Settings → Variables and Secrets → Add*: secreto **`TOKEN`** = el contenido de `clave-servidor.txt` (fichero local, no se sube a GitHub).
+5. En `index-src.html` rellenar `API_URL` (`https://expansion-api.<subdominio>.workers.dev`, sin barra final); `API_TOKEN` ya está puesto. Reconstruir y publicar.
 
-Cómo funciona: toda la base va en una sola clave KV (`db`); las fotos van aparte (`foto:<id>`). La app guarda primero en local, manda los cambios por una cola que sobrevive a cortes de cobertura, y consulta el servidor cada 30 s y al volver a la pestaña. Dos cambios casi simultáneos sobre el mismo documento: gana el último.
+Cómo funciona: toda la base va en una sola clave KV (`db`); las fotos van aparte (`foto:<id>`). La app guarda primero en local, manda los cambios en lotes por una cola que sobrevive a cortes de cobertura (KV admite 1 escritura/s por clave) y reintenta sola, y consulta el servidor cada 30 s y al volver a la pestaña. Dos cambios casi simultáneos sobre el mismo documento: gana el último.
 El token va dentro del bloque cifrado; el Worker solo acepta peticiones con él y solo responde al origen `https://dirdam268.github.io`.
+
+La primera vez que un dispositivo se conecta sube lo que ya tenía en local (clave `exp_seeded`), para que el servidor vacío no lo borre.
