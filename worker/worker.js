@@ -165,15 +165,67 @@ function filasTomas(db) {
   }
   return rows;
 }
+function filasDesestimados(db) {
+  const L = Object.entries(db.locales || {}).map(([id, l]) => ({ ...l, id })).filter((l) => l.estado === 'desestimado').sort((a, b) => (b.created || 0) - (a.created || 0));
+  const rows = [['Nombre', 'Dirección', 'Municipio', 'Operación', 'Precio (€)', 'Metros totales (m²)', 'Causa de la desestimación', 'Fecha', 'Inmobiliaria', 'Teléfono fijo', 'Teléfono móvil', 'Candidato', 'Enlace del anuncio', 'Descripción', 'Notas', 'Mes de la visita', 'Dado de alta por', 'Google Maps']];
+  for (const l of L) {
+    const t = telsDeW(l), u = urlSegura(l.url);
+    rows.push([l.name || '', l.address || '', l.muni || '', l.op === 'venta' ? 'Venta' : 'Alquiler', N(l.price), N(l.m2), (CAUSAS_W[l.causaDes] || 'Sin indicar') + (l.causaDesTxt ? ' · ' + l.causaDesTxt : ''), fmtFecha(l.fechaDes),
+      l.inmo || '', t.fijo, t.movil, l.candidato || '', u ? { url: u } : '', l.notes || '', notasTxt(l), l.month ? fmtMes(l.month) : '', l.by || '', { url: linkMaps(l), t: 'Google Maps' }]);
+  }
+  return rows;
+}
+// Agenda: inmobiliarias y candidatos (de locales, tomas y locales/tomas ya borrados), fusionados por nombre o teléfono
+function filasAgenda(db) {
+  const items = [], porTel = new Map(), porNombre = new Map();
+  const slugW = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const limpia = (t) => String(t || '').replace(/\D/g, '').replace(/^34(?=\d{9}$)/, '');
+  const add = (tipo, nombre, fijo, movil, ref) => {
+    const claves = [...fijo, ...movil].map(limpia).filter(Boolean);
+    let it = (nombre && porNombre.get(tipo + ':' + slugW(nombre))) || claves.map((c) => porTel.get(c)).find(Boolean);
+    if (!it) { it = { tipo, nombre: nombre || '', fijo: [], movil: [], refs: [] }; items.push(it); }
+    if (!it.nombre && nombre) it.nombre = nombre;
+    for (const t of fijo) if (t && !it.fijo.some((x) => limpia(x) === limpia(t))) it.fijo.push(t);
+    for (const t of movil) if (t && !it.movil.some((x) => limpia(x) === limpia(t))) it.movil.push(t);
+    it.refs.push(ref);
+    if (nombre) porNombre.set(tipo + ':' + slugW(nombre), it);
+    for (const c of [...it.fijo, ...it.movil].map(limpia)) porTel.set(c, it);
+  };
+  const lista = (v) => (v ? [v] : []);
+  for (const l of Object.values(db.locales || {})) {
+    const t = telsDeW(l), est = ESTADOS_W[l.estado || 'estudio'] || 'En estudio';
+    if (l.inmo || t.fijo || t.movil) add('Inmobiliaria', l.inmo || '', lista(t.fijo), lista(t.movil), (l.address || l.name || '') + ' (' + est + ')');
+    if (l.candidato || l.candtelfijo || l.candtelmovil) add('Candidato', l.candidato || '', lista(l.candtelfijo), lista(l.candtelmovil), (l.address || l.name || '') + ' (' + est + ')');
+  }
+  for (const c of Object.values(db.competencia || {})) {
+    if (!c.toma) continue;
+    const t = telsDeW(c);
+    if (c.candidato || t.fijo || t.movil) add('Candidato · competencia', c.candidato || '', lista(t.fijo), lista(t.movil), (c.brand || 'Toma') + (c.address ? ' · ' + c.address : '') + ' (toma)');
+  }
+  for (const d of Object.values(db.config || {})) {   // contactos de locales/tomas borrados
+    if (!d || !d.ag) continue;
+    const t = telsDeW(d), ref = (d.txt || 'Borrado') + ' (borrado)';
+    if (!d.toma && (d.inmo || t.fijo || t.movil)) add('Inmobiliaria', d.inmo || '', lista(t.fijo), lista(t.movil), ref);
+    if (d.toma) { if (d.candidato || t.fijo || t.movil) add('Candidato · competencia', d.candidato || '', lista(t.fijo), lista(t.movil), ref); }
+    else if (d.candidato || d.candtelfijo || d.candtelmovil) add('Candidato', d.candidato || '', lista(d.candtelfijo), lista(d.candtelmovil), ref);
+  }
+  for (const it of items) if (!it.nombre) it.nombre = it.tipo + ' ' + (it.movil[0] || it.fijo[0] || 'sin teléfono');
+  items.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const rows = [['Nombre', 'Tipo', 'Teléfono móvil', 'Teléfono fijo', 'Locales / tomas relacionados']];
+  for (const it of items) rows.push([it.nombre, it.tipo, it.movil.join(' / '), it.fijo.join(' / '), it.refs.join('\n')]);
+  return rows;
+}
 const aBase64 = (buf) => { const b = new Uint8Array(buf); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); };
 
 async function enviarSemanal(env) {
   if (!env.RESEND_KEY) return { ok: false, error: 'Falta el secreto RESEND_KEY en el Worker' };
   const db = (await env.EXP.get('db', 'json')) || {};
-  const locales = filasLocales(db), tomas = filasTomas(db);
+  const locales = filasLocales(db), tomas = filasTomas(db), desest = filasDesestimados(db), agenda = filasAgenda(db);
   const blob = buildXlsx([
     { name: 'Locales', rows: locales, widths: [28, 16, 28, 11, 32, 16, 12, 12, 12, 10, 9, 11, 16, 14, 14, 14, 22, 15, 15, 22, 15, 15, 11, 38, 50, 50, 16, 14, 11, 40, 16, 12] },
-    { name: 'Tomas de competencia', rows: tomas, widths: [22, 24, 24, 15, 15, 34, 16, 10, 14, 14, 10, 50, 50, 16, 14, 16, 12] }]);
+    { name: 'Tomas de competencia', rows: tomas, widths: [22, 24, 24, 15, 15, 34, 16, 10, 14, 14, 10, 50, 50, 16, 14, 16, 12] },
+    { name: 'Desestimados', rows: desest, widths: [28, 32, 16, 11, 12, 12, 34, 12, 22, 15, 15, 22, 38, 50, 50, 16, 14, 16] },
+    { name: 'Agenda', rows: agenda, widths: [30, 22, 22, 20, 60] }]);
   const hoy = new Date().toISOString().slice(0, 10);
   const nDes = Object.values(db.locales || {}).filter((l) => l.estado === 'desestimado').length;
   const r = await fetch('https://api.resend.com/emails', {
@@ -183,7 +235,7 @@ async function enviarSemanal(env) {
       from: 'Expansión Centro <onboarding@resend.dev>',
       to: [env.DESTINO || 'bordetass@gmail.com'],
       subject: 'Expansión Centro · Excel semanal ' + hoy,
-      text: 'Excel semanal de Expansión Centro.\n\n' + (locales.length - 1) + ' locales (' + nDes + ' desestimados) y ' + (tomas.length - 1) + ' tomas de competencia.\n',
+      text: 'Excel semanal de Expansión Centro.\n\n' + (locales.length - 1) + ' locales (' + nDes + ' desestimados) y ' + (tomas.length - 1) + ' tomas de competencia.\nHojas: Locales, Tomas de competencia, Desestimados y Agenda (' + (agenda.length - 1) + ' contactos).\n',
       attachments: [{ filename: 'expansion-centro-' + hoy + '.xlsx', content: aBase64(await blob.arrayBuffer()) }],
     }),
   });
