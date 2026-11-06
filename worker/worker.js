@@ -130,7 +130,7 @@ const esMovilTel = (t) => /^[67]/.test(String(t || '').replace(/\D/g, '').replac
 const telsDeW = (l) => { let fijo = l.telfijo || '', movil = l.telmovil || ''; if (l.tel) { if (esMovilTel(l.tel)) { if (!movil) movil = l.tel; } else if (!fijo) fijo = l.tel; } return { fijo, movil }; };
 const urlSegura = (u) => /^https?:\/\//i.test(String(u || '')) ? String(u) : '';
 const portalW = (u) => { const h = String(u || '').toLowerCase(); return /idealista/.test(h) ? 'Idealista' : /fotocasa/.test(h) ? 'Fotocasa' : /habitaclia/.test(h) ? 'Habitaclia' : /pisos\.com/.test(h) ? 'Pisos.com' : h ? 'Otro' : ''; };
-const ESTADOS_W = { estudio: 'En estudio', negociacion: 'En negociación', largo: 'A largo plazo', desestimado: 'Desestimado' };
+const ESTADOS_W = { estudio: 'En estudio', negociacion: 'En negociación', largo: 'A largo plazo', standby: 'Stand by', notasimple: 'Nota simple pedida', desestimado: 'Desestimado' };
 const CAUSAS_W = { precio: 'Precio o renta demasiado altos', superficie: 'Superficie inadecuada', fachada: 'Fachada o escaparate insuficiente', ubicacion: 'Mala ubicación o poca afluencia', competencia: 'Competencia cercana', propiedad: 'La propiedad no negocia / ya no está disponible', legal: 'Problemas legales o de licencia', obras: 'Obras o costes de adaptación', otra: 'Otra causa' };
 const notasTxt = (o) => (o.notas || []).map((x) => fmtFecha(x.d) + (x.u ? ' (' + x.u + ')' : '') + ': ' + x.t).join('\n');
 const N = (v) => { const n = nnum(v); return n != null ? { num: n } : ''; };
