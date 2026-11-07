@@ -103,6 +103,8 @@ export default {
         return out(bin, 200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=31536000' });
       }
     }
+    // GET /ics?n=&d=&h=&r=&l=&g=&x=&u=   -> un recordatorio de calendario (.ics) que el iPhone/Android abren y añaden con un toque
+    if (req.method === 'GET' && parts[0] === 'ics') return out(icsDesdeParams(url.searchParams), 200, { 'Content-Type': 'text/calendar; charset=utf-8', 'Content-Disposition': 'inline; filename="recordatorio.ics"', 'Cache-Control': 'no-store' });
     // POST /enviar-excel  -> manda ya el Excel por correo (sirve para probar sin esperar al lunes)
     if (parts[0] === 'enviar-excel') return json(await enviarSemanal(env));
     return json({ error: 'no encontrado' }, 404);
@@ -112,6 +114,41 @@ export default {
     ctx.waitUntil(enviarSemanal(env));
   },
 };
+
+/* ================== recordatorio de calendario (.ics) a partir de parámetros ==================
+   n título · d fecha AAAA-MM-DD · h hora HH:MM (vacía = todo el día) · r frecuencia (DAILY|WEEKLY|MONTHLY|YEARLY[;INTERVAL=n])
+   l lugar · g «lat;lng» · x descripción · u identificador (al volver a añadirlo se actualiza en vez de duplicarse) */
+function icsDesdeParams(q) {
+  const t = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;').slice(0, 900);
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(q.get('d') || '') ? q.get('d') : new Date().toISOString().slice(0, 10);
+  const h = /^\d{2}:\d{2}$/.test(q.get('h') || '') ? q.get('h') : '';
+  const r = /^(DAILY|WEEKLY|MONTHLY|YEARLY)(;INTERVAL=\d{1,2})?$/.test(q.get('r') || '') ? q.get('r') : '';
+  const g = /^-?\d+(\.\d+)?;-?\d+(\.\d+)?$/.test(q.get('g') || '') ? q.get('g') : '';
+  const u = String(q.get('u') || 'rec').replace(/[^\w-]/g, '').slice(0, 60) || 'rec';
+  const n = q.get('n') || 'Recordatorio';
+  const f = d.replace(/-/g, '');
+  const p2 = (x) => String(x).padStart(2, '0');
+  const L = ['BEGIN:VEVENT', 'UID:' + u + '@expansion-centro', 'DTSTAMP:' + new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '')];
+  let alarmas;
+  if (h) {
+    const [hh, mm] = h.split(':').map(Number);
+    L.push('DTSTART:' + f + 'T' + p2(hh) + p2(mm) + '00', 'DTEND:' + f + 'T' + p2((hh + (mm + 30 >= 60 ? 1 : 0)) % 24) + p2((mm + 30) % 60) + '00');
+    alarmas = ['PT0S', '-PT1H'];
+  } else {
+    const [y, m, dd] = d.split('-').map(Number);
+    const sig = new Date(Date.UTC(y, m - 1, dd + 1)).toISOString().slice(0, 10).replace(/-/g, '');
+    L.push('DTSTART;VALUE=DATE:' + f, 'DTEND;VALUE=DATE:' + sig);
+    alarmas = ['PT9H', '-PT15H'];
+  }
+  L.push('SUMMARY:' + t(n));
+  if (r) L.push('RRULE:FREQ=' + r);
+  if (q.get('l')) L.push('LOCATION:' + t(q.get('l')));
+  if (g) L.push('GEO:' + g);
+  if (q.get('x')) L.push('DESCRIPTION:' + t(q.get('x')));
+  for (const a of alarmas) L.push('BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + t(n), 'TRIGGER:' + a, 'END:VALARM');
+  L.push('END:VEVENT');
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Expansion Centro//ES', 'CALSCALE:GREGORIAN', ...L, 'END:VCALENDAR'].join('\r\n') + '\r\n';
+}
 
 /* ================== Excel semanal por correo ==================
    Cada lunes (cron) el Worker monta un Excel con todos los locales (también los desestimados) y las tomas de
