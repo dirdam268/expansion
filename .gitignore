@@ -6,3 +6,6 @@ index-src.html
 build-secure.ps1
 
 clave-servidor.txt
+
+# Script de publicacion (lleva la contrasena de cifrado): NO subir
+publicar.ps1
